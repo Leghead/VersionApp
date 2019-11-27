@@ -15,23 +15,83 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.play.core.appupdate.AppUpdateManager
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.install.InstallState
+import com.google.android.play.core.install.InstallStateUpdatedListener
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.InstallStatus
+import com.google.android.play.core.install.model.UpdateAvailability
 import kotlinx.android.synthetic.main.activity_main.*
 import org.jsoup.Jsoup
 import pe.solera.versionapp.BuildConfig.VERSION_NAME
 
 class MainActivity : AppCompatActivity() {
 
+    val MY_REQUEST_CODE = 1234
+
+
+    internal var appUpdateManager: AppUpdateManager? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
         txvMovil.text = VERSION_NAME
 
-        VersioningTask(this, this).execute()
+
+// Creates instance of the manager.
+           appUpdateManager = AppUpdateManagerFactory.create(this)
+
+
+        val appUpdateInfoTask = appUpdateManager!!.appUpdateInfo
+        appUpdateManager!!.registerListener(installStateUpdatedListener)
+
+        appUpdateInfoTask.addOnSuccessListener { appUpdateInfo ->
+            if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE && appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) {
+                // Request the update.
+                appUpdateManager!!.startUpdateFlowForResult(appUpdateInfo, AppUpdateType.IMMEDIATE, this, MY_REQUEST_CODE)
+            }
+        }
+
+
+        //VersioningTask(this, this).execute()
+    }
+
+
+    internal var installStateUpdatedListener: InstallStateUpdatedListener = object :
+        InstallStateUpdatedListener {
+        override fun onStateUpdate(state: InstallState) {
+            if (state.installStatus() == InstallStatus.DOWNLOADED) {
+                Toast.makeText(this@MainActivity,"Aplicación Actulizada",Toast.LENGTH_SHORT).show()
+            } else if (state.installStatus() == InstallStatus.INSTALLED) {
+                if (appUpdateManager != null) {
+                    appUpdateManager!!.unregisterListener(this)
+                }
+
+            } else {
+                Log.i("TAG", "InstallStateUpdatedListener: state: " + state.installStatus())
+            }
+        }
+    }
+
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == MY_REQUEST_CODE) {
+            if (resultCode != RESULT_OK) {
+                Log.d("Updateflowfailedcode", requestCode.toString())
+                // If the update is cancelled or fails,
+                // you can request to start the update again.
+            } else {
+                Toast.makeText(this@MainActivity,"Aplicación Actulizada",Toast.LENGTH_SHORT).show()
+                Log.d("Updatesuccessdcode", requestCode.toString())
+            }
+        }
     }
 
     fun openDiaglog(isMandatory: Boolean) {
-        val dialog = AlertDialog.Builder(this).setTitle("Nueva actualización").setCancelable(false).create()
+        val dialog =
+            AlertDialog.Builder(this).setTitle("Nueva actualización").setCancelable(false).create()
 
         val inflater = this.layoutInflater
         val dialogView = inflater.inflate(R.layout.dialog_version, null)
@@ -45,7 +105,8 @@ class MainActivity : AppCompatActivity() {
         txvTitle.text = "Nueva actualización"
 
         if (isMandatory) {
-            txvMessage.text = "Estimado Socio, para una mejor experiencia, por favor actualice su APP."
+            txvMessage.text =
+                "Estimado Socio, para una mejor experiencia, por favor actualice su APP."
             txvNegative.text = "Salir"
             txvPositive.text = "Actualizar"
 
@@ -58,7 +119,8 @@ class MainActivity : AppCompatActivity() {
                 redirectStore()
             }
         } else {
-            txvMessage.text = "Estimado Socio, para una mejor experiencia, por favor actualice su APP."
+            txvMessage.text =
+                "Estimado Socio, para una mejor experiencia, por favor actualice su APP."
             txvNegative.text = "Más tarde"
             txvPositive.text = "Actualizar"
 
@@ -86,7 +148,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    class VersioningTask(val activity: Activity, val context: Context) : AsyncTask<String, Int, String>() {
+    class VersioningTask(val activity: Activity, val context: Context) :
+        AsyncTask<String, Int, String>() {
 
         override fun doInBackground(vararg params: String?): String {
             try {
